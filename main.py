@@ -1,61 +1,42 @@
-from flask import Flask, jsonify, request, abort
+from flask import Flask, jsonify, request
+from models import db, User, Post
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
 
-# Временные хранилища для пользователей и постов
-users = {}
-posts = {}
-post_id_counter = 1
+with app.app_context():
+    db.create_all()
 
-# Создать пользователя (если потребуется, для упрощения, не реализовано в данном примере)
-@app.route('/users', methods=['POST'])
-def create_user():
-    data = request.json
-    user_id = data.get('id')
-    if user_id in users:
-        return jsonify({'error': 'User already exists'}), 400
-    users[user_id] = data
-    return jsonify(data), 201
-
-# Создать пост
 @app.route('/posts', methods=['POST'])
 def create_post():
-    global post_id_counter
     data = request.json
-    post = {
-        'id': post_id_counter,
-        'user_id': data['user_id'],
-        'content': data['content']
-    }
-    posts[post_id_counter] = post
-    post_id_counter += 1
-    return jsonify(post), 201
+    post = Post(title=data['title'], content=data['content'], user_id=data['user_id'])
+    db.session.add(post)
+    db.session.commit()
+    return jsonify({'message': 'Post created!', 'post': {'id': post.id}}), 201
 
-# Получить пост
 @app.route('/posts/<int:post_id>', methods=['GET'])
-def get_post(post_id):
-    post = posts.get(post_id)
-    if post is None:
-        abort(404)
-    return jsonify(post)
+def read_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    return jsonify({'title': post.title, 'content': post.content, 'user_id': post.user_id})
 
-# Изменить пост
 @app.route('/posts/<int:post_id>', methods=['PUT'])
 def update_post(post_id):
-    post = posts.get(post_id)
-    if post is None:
-        abort(404)
     data = request.json
-    post['content'] = data['content']
-    return jsonify(post)
+    post = Post.query.get_or_404(post_id)
+    post.title = data['title']
+    post.content = data['content']
+    db.session.commit()
+    return jsonify({'message': 'Post updated!'})
 
-# Удалить пост
 @app.route('/posts/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
-    post = posts.pop(post_id, None)
-    if post is None:
-        abort(404)
-    return jsonify({'result': True})
+    post = Post.query.get_or_404(post_id)
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'message': 'Post deleted!'})
 
 if __name__ == '__main__':
     app.run(debug=True)
